@@ -1,9 +1,0 @@
-{
-  "relayMetadata": {
-    "relays": [
-      { "url": "wss://garden.adamiskandar.com", "read": true, "write": false }
-    ],
-    "updatedAt": 0
-  },
-  "useUserRelays": true
-}
