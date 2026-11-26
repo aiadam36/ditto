@@ -39,7 +39,7 @@ deploy.sh
 !.env.example
 
 # Build-time configuration
-ditto.json
+!ditto.json
 
 # Android build outputs and sensitive files
 *.aab
