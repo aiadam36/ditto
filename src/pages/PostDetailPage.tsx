@@ -139,6 +139,8 @@ import { LOVE_LIST_KIND } from "@/hooks/useLoveList";
 import { TOP8_KIND } from "@/hooks/useTop8";
 import { SnoContent } from "@/components/SnoContent";
 import { SNO_KIND } from "@/lib/sno";
+import { OCARINA_SONG_KIND } from "@/lib/ocarinaSong";
+import { OcarinaSongContent } from "@/components/OcarinaSongContent";
 import { VanishEventContent } from "@/components/VanishEventContent";
 import { parseFirstImeta } from '@/lib/imeta';
 import { type FileEncryption } from '@/lib/encryptedFile';
@@ -1373,6 +1375,7 @@ function PostDetailContent({ event }: { event: NostrEvent }) {
   const isFoundLog = event.kind === 7516;
   const isColor = event.kind === 3367;
   const isSno = event.kind === SNO_KIND;
+  const isOcarinaSong = event.kind === OCARINA_SONG_KIND;
   const isBirdDetection = event.kind === 2473;
   const isBirdex = event.kind === 12473;
   const isConstellation = event.kind === 30621;
@@ -1435,6 +1438,7 @@ function PostDetailContent({ event }: { event: NostrEvent }) {
     !isFoundLog &&
     !isColor &&
     !isSno &&
+    !isOcarinaSong &&
     !isBirdDetection &&
     !isConstellation &&
     !isPeopleList &&
@@ -1786,17 +1790,34 @@ function PostDetailContent({ event }: { event: NostrEvent }) {
   }, [textRepliesLoading, rawReplies, commentsData?.allComments, textReplyRoots, interactions, interactionsUpdatedAt]);
   const { data: stats } = useLiveEventStats(event, liveCounts);
 
-  // Split off the flood-flagged top-level replies so they render as one
-  // collapsed, expandable row beneath the clean thread instead of filling it.
+  // Split off the flood-flagged replies so they render as one collapsed,
+  // expandable row beneath the clean thread instead of filling it. Flagged
+  // replies are cut out at any depth, with whatever hangs under them: spam
+  // that answers each real reply in a thread, rather than the post, would
+  // otherwise sit nested under every one of them.
   const { visibleRoots, floodedRoots } = useMemo(() => {
     if (floodedIds.size === 0) {
       return { visibleRoots: replyTree, floodedRoots: [] as ReplyNode[] };
     }
-    const visible: ReplyNode[] = [];
     const flooded: ReplyNode[] = [];
-    for (const node of replyTree) {
-      (floodedIds.has(node.event.id) ? flooded : visible).push(node);
-    }
+    const keep = (nodes: ReplyNode[]): ReplyNode[] => {
+      const out: ReplyNode[] = [];
+      for (const node of nodes) {
+        if (floodedIds.has(node.event.id)) flooded.push(node);
+        else out.push(prune(node));
+      }
+      return out;
+    };
+    const prune = (node: ReplyNode): ReplyNode => {
+      const children = keep(node.children);
+      const hidden = node.hiddenChildren ? keep(node.hiddenChildren) : [];
+      // The inline chain shows one child; if spam was it, the next real one takes its place.
+      const next = children.length === 0 ? hidden.shift() : undefined;
+      if (next) children.push(next);
+      return hidden.length > 0 ? { event: node.event, children, hiddenChildren: hidden } : { event: node.event, children };
+    };
+    const visible = keep(replyTree);
+    flooded.sort((a, b) => a.event.created_at - b.event.created_at);
     return { visibleRoots: visible, floodedRoots: flooded };
   }, [replyTree, floodedIds]);
 
@@ -3027,6 +3048,8 @@ function PostDetailContent({ event }: { event: NostrEvent }) {
               <BadgeAwardCard event={event} />
             ) : isSno ? (
               <SnoContent event={event} expanded className="mt-3" />
+            ) : isOcarinaSong ? (
+              <OcarinaSongContent event={event} className="mt-3" />
             ) : isVine ||
               isPoll ||
               isGeocache ||
